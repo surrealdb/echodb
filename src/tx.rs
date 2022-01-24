@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::db::Db;
 use crate::err::Error;
-use crate::ptr::Ptr;
+use arc_swap::ArcSwap;
 use futures::lock::MutexLockFuture;
 use im::OrdMap;
-use std::cell::RefCell;
 use std::ops::Range;
-use std::pin::Pin;
+use std::sync::Arc;
 
 pub struct Tx<'a, K, V> {
 	// Is the transaction complete?
@@ -28,10 +26,10 @@ pub struct Tx<'a, K, V> {
 	pub(crate) rw: bool,
 	// The immutable copy of the data map
 	pub(crate) ds: OrdMap<K, V>,
+	// The pointer to the latest data map
+	pub(crate) pt: Arc<ArcSwap<OrdMap<K, V>>>,
 	// The underlying database write mutex
 	pub(crate) lk: Option<MutexLockFuture<'a, ()>>,
-	// The back reference to the parent database
-	pub(crate) db: RefCell<Pin<Box<Ptr<Db<K, V>>>>>,
 }
 
 impl<'a, K, V> Tx<'a, K, V>
@@ -41,7 +39,7 @@ where
 {
 	// Create a transaction
 	pub(crate) fn new(
-		db: &'a Db<K, V>,
+		pt: Arc<ArcSwap<OrdMap<K, V>>>,
 		write: bool,
 		guard: Option<MutexLockFuture<'a, ()>>,
 	) -> Tx<'a, K, V> {
@@ -49,8 +47,8 @@ where
 			ok: false,
 			rw: write,
 			lk: guard,
-			ds: db.ds.clone(),
-			db: RefCell::new(Pin::new(Box::new(Ptr::new(db)))),
+			pt: pt.clone(),
+			ds: (*(*pt.load())).clone(),
 		}
 	}
 	// Check if closed
@@ -60,7 +58,7 @@ where
 	// Cancel a transaction
 	pub fn cancel(&mut self) -> Result<(), Error> {
 		// Check to see if transaction is closed
-		if self.ok {
+		if self.ok == true {
 			return Err(Error::TxClosed);
 		}
 		// Mark this transaction as done
@@ -75,18 +73,17 @@ where
 	// Commit a transaction
 	pub fn commit(&mut self) -> Result<(), Error> {
 		// Check to see if transaction is closed
-		if self.ok {
+		if self.ok == true {
 			return Err(Error::TxClosed);
 		}
 		// Check to see if transaction is writable
-		if self.rw {
+		if self.rw == false {
 			return Err(Error::TxNotWritable);
 		}
 		// Mark this transaction as done
 		self.ok = true;
 		// Commit the data
-		let mut db = self.db.borrow_mut();
-		let _ = std::mem::replace(&mut db.ds, self.ds.clone());
+		self.pt.store(Arc::new(self.ds.clone()));
 		// Unlock the database mutex
 		if let Some(lk) = &self.lk.take() {
 			drop(lk);
@@ -97,11 +94,11 @@ where
 	// Delete a key
 	pub fn del(&mut self, key: K) -> Result<(), Error> {
 		// Check to see if transaction is closed
-		if self.ok {
+		if self.ok == true {
 			return Err(Error::TxClosed);
 		}
 		// Check to see if transaction is writable
-		if self.rw {
+		if self.rw == false {
 			return Err(Error::TxNotWritable);
 		}
 		// Remove the key
@@ -112,7 +109,7 @@ where
 	// Check if a key exists
 	pub fn exi(&self, key: K) -> Result<bool, Error> {
 		// Check to see if transaction is closed
-		if self.ok {
+		if self.ok == true {
 			return Err(Error::TxClosed);
 		}
 		// Check the key
@@ -123,7 +120,7 @@ where
 	// Fetch a key from the database
 	pub fn get(&self, key: K) -> Result<Option<V>, Error> {
 		// Check to see if transaction is closed
-		if self.ok {
+		if self.ok == true {
 			return Err(Error::TxClosed);
 		}
 		// Get the key
@@ -134,11 +131,11 @@ where
 	// Insert or update a key in the database
 	pub fn set(&mut self, key: K, val: V) -> Result<(), Error> {
 		// Check to see if transaction is closed
-		if self.ok {
+		if self.ok == true {
 			return Err(Error::TxClosed);
 		}
 		// Check to see if transaction is writable
-		if self.rw {
+		if self.rw == false {
 			return Err(Error::TxNotWritable);
 		}
 		// Set the key
@@ -149,11 +146,11 @@ where
 	// Insert a key if it doesn't exist in the database
 	pub fn put(&mut self, key: K, val: V) -> Result<(), Error> {
 		// Check to see if transaction is closed
-		if self.ok {
+		if self.ok == true {
 			return Err(Error::TxClosed);
 		}
 		// Check to see if transaction is writable
-		if self.rw {
+		if self.rw == false {
 			return Err(Error::TxNotWritable);
 		}
 		// Set the key
@@ -164,7 +161,7 @@ where
 	// Retrieve a range of keys from the databases
 	pub fn scan(&self, rng: Range<K>, limit: u32) -> Result<Vec<(K, V)>, Error> {
 		// Check to see if transaction is closed
-		if self.ok {
+		if self.ok == true {
 			return Err(Error::TxClosed);
 		}
 		// Scan the keys

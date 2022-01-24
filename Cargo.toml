@@ -13,6 +13,10 @@ categories = ["database-implementations", "data-structures", "embedded"]
 license = "Apache-2.0"
 
 [dependencies]
+arc-swap = "1.5.0"
 futures = "0.3.19"
 im = "15.0.0"
 thiserror = "1.0.30"
+
+[dev-dependencies]
+tokio = { version = "1.15.0", features = ["rt", "macros"] }

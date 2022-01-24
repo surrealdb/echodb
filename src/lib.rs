@@ -15,7 +15,6 @@
 pub mod db;
 pub mod err;
 pub mod kv;
-pub mod ptr;
 pub mod tx;
 
 pub use self::db::*;
