@@ -8,7 +8,7 @@ authors = ["Tobie Morgan Hitchcock <tobie@surrealdb.com>"]
 description = "An embedded, in-memory, immutable, copy-on-write database engine"
 repository = "https://github.com/surrealdb/echodb"
 homepage = "https://github.com/surrealdb/echodb"
-keywords = ["database", "embedded-database", "key-value", "kv store"]
+keywords = ["database", "embedded-database", "key-value", "key-value-store", "kv-store"]
 categories = ["database-implementations", "data-structures", "embedded"]
 license = "Apache-2.0"
 
