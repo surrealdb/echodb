@@ -14,12 +14,12 @@
 
 use crate::err::Error;
 use arc_swap::ArcSwap;
-use futures::lock::MutexLockFuture;
 use im::OrdMap;
 use std::ops::Range;
 use std::sync::Arc;
+use tokio::sync::OwnedMutexGuard;
 
-pub struct Tx<'a, K, V> {
+pub struct Tx<K, V> {
 	// Is the transaction complete?
 	pub(crate) ok: bool,
 	// Is the transaction read+write?
@@ -29,10 +29,10 @@ pub struct Tx<'a, K, V> {
 	// The pointer to the latest data map
 	pub(crate) pt: Arc<ArcSwap<OrdMap<K, V>>>,
 	// The underlying database write mutex
-	pub(crate) lk: Option<MutexLockFuture<'a, ()>>,
+	pub(crate) lk: Option<OwnedMutexGuard<()>>,
 }
 
-impl<'a, K, V> Tx<'a, K, V>
+impl<K, V> Tx<K, V>
 where
 	K: Ord + Clone,
 	V: Clone,
@@ -41,8 +41,8 @@ where
 	pub(crate) fn new(
 		pt: Arc<ArcSwap<OrdMap<K, V>>>,
 		write: bool,
-		guard: Option<MutexLockFuture<'a, ()>>,
-	) -> Tx<'a, K, V> {
+		guard: Option<OwnedMutexGuard<()>>,
+	) -> Tx<K, V> {
 		Tx {
 			ok: false,
 			rw: write,
