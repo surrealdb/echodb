@@ -1,11 +1,8 @@
 <br>
 
 <p align="center">
-    <a href="https://surrealdb.com#gh-dark-mode-only" target="_blank">
-        <img width="200" src="/img/white/logo.svg" alt="EchoDB Logo">
-    </a>
-    <a href="https://surrealdb.com#gh-light-mode-only" target="_blank">
-        <img width="200" src="/img/black/logo.svg" alt="EchoDB Logo">
+    <a href="https://github.com/surrealdb/echodb" target="_blank">
+        <img width="200" src="https://raw.githubusercontent.com/surrealdb/echodb/master/img/logo.svg" alt="EchoDB Logo">
     </a>
 </p>
 
