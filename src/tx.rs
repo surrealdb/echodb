@@ -14,7 +14,7 @@
 
 use crate::err::Error;
 use arc_swap::ArcSwap;
-use im::OrdMap;
+use imbl::OrdMap;
 use std::ops::Range;
 use std::sync::Arc;
 use tokio::sync::OwnedMutexGuard;

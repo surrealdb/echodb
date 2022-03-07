@@ -14,7 +14,7 @@ license = "Apache-2.0"
 
 [dependencies]
 arc-swap = "1.5.0"
-im = "15.0.0"
+imbl = "1.0.1"
 thiserror = "1.0.30"
 tokio = { version = "1.16.1", features = ["sync"] }
 
