@@ -2,7 +2,7 @@
 name = "echodb"
 publish = true
 edition = "2021"
-version = "0.2.0"
+version = "0.2.1"
 readme = "CARGO.md"
 authors = ["Tobie Morgan Hitchcock <tobie@surrealdb.com>"]
 description = "An embedded, in-memory, immutable, copy-on-write database engine"
