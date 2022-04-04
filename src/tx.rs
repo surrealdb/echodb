@@ -35,7 +35,7 @@ pub struct Tx<K, V> {
 impl<K, V> Tx<K, V>
 where
 	K: Ord + Clone,
-	V: Clone,
+	V: Eq + Clone,
 {
 	// Create a transaction
 	pub(crate) fn new(
@@ -91,21 +91,6 @@ where
 		// Continue
 		Ok(())
 	}
-	// Delete a key
-	pub fn del(&mut self, key: K) -> Result<(), Error> {
-		// Check to see if transaction is closed
-		if self.ok == true {
-			return Err(Error::TxClosed);
-		}
-		// Check to see if transaction is writable
-		if self.rw == false {
-			return Err(Error::TxNotWritable);
-		}
-		// Remove the key
-		self.ds.remove(&key);
-		// Return result
-		Ok(())
-	}
 	// Check if a key exists
 	pub fn exi(&self, key: K) -> Result<bool, Error> {
 		// Check to see if transaction is closed
@@ -154,7 +139,63 @@ where
 			return Err(Error::TxNotWritable);
 		}
 		// Set the key
-		self.ds.insert(key, val);
+		match self.ds.get(&key) {
+			None => self.ds.insert(key, val),
+			_ => return Err(Error::KeyAlreadyExists),
+		};
+		// Return result
+		Ok(())
+	}
+	// Insert a key if it matches a value
+	pub fn putc(&mut self, key: K, val: V, chk: Option<V>) -> Result<(), Error> {
+		// Check to see if transaction is closed
+		if self.ok == true {
+			return Err(Error::TxClosed);
+		}
+		// Check to see if transaction is writable
+		if self.rw == false {
+			return Err(Error::TxNotWritable);
+		}
+		// Set the key
+		match (self.ds.get(&key), &chk) {
+			(Some(v), Some(w)) if v == w => self.ds.insert(key, val),
+			(None, None) => self.ds.insert(key, val),
+			_ => return Err(Error::ValNotExpectedValue),
+		};
+		// Return result
+		Ok(())
+	}
+	// Delete a key
+	pub fn del(&mut self, key: K) -> Result<(), Error> {
+		// Check to see if transaction is closed
+		if self.ok == true {
+			return Err(Error::TxClosed);
+		}
+		// Check to see if transaction is writable
+		if self.rw == false {
+			return Err(Error::TxNotWritable);
+		}
+		// Remove the key
+		self.ds.remove(&key);
+		// Return result
+		Ok(())
+	}
+	// Delete a key if it matches a value
+	pub fn delc(&mut self, key: K, chk: Option<V>) -> Result<(), Error> {
+		// Check to see if transaction is closed
+		if self.ok == true {
+			return Err(Error::TxClosed);
+		}
+		// Check to see if transaction is writable
+		if self.rw == false {
+			return Err(Error::TxNotWritable);
+		}
+		// Remove the key
+		match (self.ds.get(&key), &chk) {
+			(Some(v), Some(w)) if v == w => self.ds.remove(&key),
+			(None, None) => self.ds.remove(&key),
+			_ => return Err(Error::ValNotExpectedValue),
+		};
 		// Return result
 		Ok(())
 	}

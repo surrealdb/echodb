@@ -35,7 +35,7 @@ pub fn new<K, V>() -> Db<K, V> {
 impl<K, V> Db<K, V>
 where
 	K: Ord + Clone,
-	V: Clone,
+	V: Eq + Clone,
 {
 	// Start a new transaction
 	pub async fn begin(&self, write: bool) -> Result<Tx<K, V>, Error> {
