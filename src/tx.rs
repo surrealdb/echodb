@@ -200,14 +200,13 @@ where
 		Ok(())
 	}
 	// Retrieve a range of keys from the databases
-	pub fn scan(&self, rng: Range<K>, limit: u32) -> Result<Vec<(K, V)>, Error> {
+	pub fn scan(&self, rng: Range<K>, limit: usize) -> Result<Vec<(K, V)>, Error> {
 		// Check to see if transaction is closed
 		if self.ok == true {
 			return Err(Error::TxClosed);
 		}
 		// Scan the keys
-		let res = self.ds.range(rng);
-		let res = res.take(limit as usize).map(|(k, v)| (k.clone(), v.clone())).collect();
+		let res = self.ds.range(rng).take(limit).map(|(k, v)| (k.clone(), v.clone())).collect();
 		// Return result
 		Ok(res)
 	}
