@@ -139,8 +139,8 @@ where
 			return Err(Error::TxNotWritable);
 		}
 		// Set the key
-		match self.ds.get(&key) {
-			None => self.ds.insert(key, val),
+		match self.ds.contains_key(&key) {
+			false => self.ds.insert(key, val),
 			_ => return Err(Error::KeyAlreadyExists),
 		};
 		// Return result
