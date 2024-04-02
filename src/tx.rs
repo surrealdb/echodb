@@ -64,7 +64,7 @@ where
 		// Mark this transaction as done
 		self.ok = true;
 		// Unlock the database mutex
-		if let Some(lk) = &self.lk.take() {
+		if let Some(lk) = self.lk.take() {
 			drop(lk);
 		}
 		// Continue
@@ -85,7 +85,7 @@ where
 		// Commit the data
 		self.pt.store(Arc::new(self.ds.clone()));
 		// Unlock the database mutex
-		if let Some(lk) = &self.lk.take() {
+		if let Some(lk) = self.lk.take() {
 			drop(lk);
 		}
 		// Continue
