@@ -143,8 +143,10 @@ where
 			return Err(Error::TxNotWritable);
 		}
 		// Set the key
-		match self.ds.contains_key(&key) {
-			false => self.ds.insert(key, val),
+		match self.ds.entry(key) {
+			Entry::Vacant(v) => {
+				v.insert(val);
+			}
 			_ => return Err(Error::KeyAlreadyExists),
 		};
 		// Return result
@@ -161,9 +163,13 @@ where
 			return Err(Error::TxNotWritable);
 		}
 		// Set the key
-		match (self.ds.get(&key), &chk) {
-			(Some(v), Some(w)) if v == w => self.ds.insert(key, val),
-			(None, None) => self.ds.insert(key, val),
+		match (self.ds.entry(key), &chk) {
+			(Entry::Occupied(mut v), Some(w)) if v.get() == w => {
+				v.insert(val);
+			}
+			(Entry::Vacant(v), None) => {
+				v.insert(val);
+			}
 			_ => return Err(Error::ValNotExpectedValue),
 		};
 		// Return result
@@ -195,9 +201,13 @@ where
 			return Err(Error::TxNotWritable);
 		}
 		// Remove the key
-		match (self.ds.get(&key), &chk) {
-			(Some(v), Some(w)) if v == w => self.ds.remove(&key),
-			(None, None) => self.ds.remove(&key),
+		match (self.ds.entry(key), &chk) {
+			(Entry::Occupied(v), Some(w)) if v.get() == w => {
+				v.remove();
+			}
+			(Entry::Vacant(_), None) => {
+				// Nothing to delete
+			}
 			_ => return Err(Error::ValNotExpectedValue),
 		};
 		// Return result
