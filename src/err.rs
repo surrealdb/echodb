@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! This module stores the database error types.
+
 use thiserror::Error;
 
+/// The errors which can be emitted from a database.
 #[derive(Error, Debug)]
 pub enum Error {
 	#[error("Can not open transaction")]

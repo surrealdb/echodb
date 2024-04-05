@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! This module stores the core in-memory database type.
+
 use crate::err::Error;
 use crate::tx::Tx;
 use arc_swap::ArcSwap;
@@ -19,12 +21,13 @@ use imbl::OrdMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+/// A transactional in-memory database
 pub struct Db<K, V> {
 	pub(crate) lk: Arc<Mutex<()>>,
 	pub(crate) ds: Arc<ArcSwap<OrdMap<K, V>>>,
 }
 
-// Open a new database
+/// Create a new transactional in-memory database
 pub fn new<K, V>() -> Db<K, V> {
 	Db {
 		lk: Arc::new(Mutex::new(())),
@@ -37,7 +40,7 @@ where
 	K: Ord + Clone,
 	V: Eq + Clone,
 {
-	// Start a new transaction
+	/// Start a new read-only or writeable transaction
 	pub async fn begin(&self, write: bool) -> Result<Tx<K, V>, Error> {
 		match write {
 			true => Ok(Tx::new(self.ds.clone(), write, Some(self.lk.clone().lock_owned().await))),
