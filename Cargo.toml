@@ -21,8 +21,8 @@ license = "Apache-2.0"
 [dependencies]
 arc-swap = "1.7.1"
 imbl = "2.0.3"
-thiserror = "1.0.58"
-tokio = { version = "1.37.0", features = ["sync"] }
+thiserror = "1.0.61"
+tokio = { version = "1.38.0", features = ["sync"] }
 
 [dev-dependencies]
-tokio = { version = "1.37.0", features = ["rt", "macros"] }
+tokio = { version = "1.38.0", features = ["rt", "macros"] }
