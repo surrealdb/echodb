@@ -55,10 +55,12 @@ where
 			ds: (*(*pt.load())).clone(),
 		}
 	}
+
 	/// Check if the transaction is closed
 	pub fn closed(&self) -> bool {
 		self.ok
 	}
+
 	/// Cancel the transaction and rollback any changes
 	pub fn cancel(&mut self) -> Result<(), Error> {
 		// Check to see if transaction is closed
@@ -74,6 +76,7 @@ where
 		// Continue
 		Ok(())
 	}
+
 	/// Commit the transaction and store all changes
 	pub fn commit(&mut self) -> Result<(), Error> {
 		// Check to see if transaction is closed
@@ -95,6 +98,7 @@ where
 		// Continue
 		Ok(())
 	}
+
 	/// Check if a key exists in the database
 	pub fn exi(&self, key: K) -> Result<bool, Error> {
 		// Check to see if transaction is closed
@@ -106,6 +110,7 @@ where
 		// Return result
 		Ok(res)
 	}
+
 	/// Fetch a key from the database
 	pub fn get(&self, key: K) -> Result<Option<V>, Error> {
 		// Check to see if transaction is closed
@@ -117,6 +122,7 @@ where
 		// Return result
 		Ok(res)
 	}
+
 	/// Insert or update a key in the database
 	pub fn set(&mut self, key: K, val: V) -> Result<(), Error> {
 		// Check to see if transaction is closed
@@ -132,6 +138,7 @@ where
 		// Return result
 		Ok(())
 	}
+
 	/// Insert a key if it doesn't exist in the database
 	pub fn put(&mut self, key: K, val: V) -> Result<(), Error> {
 		// Check to see if transaction is closed
@@ -152,6 +159,7 @@ where
 		// Return result
 		Ok(())
 	}
+
 	/// Insert a key if it matches a value
 	pub fn putc(&mut self, key: K, val: V, chk: Option<V>) -> Result<(), Error> {
 		// Check to see if transaction is closed
@@ -175,6 +183,7 @@ where
 		// Return result
 		Ok(())
 	}
+
 	/// Delete a key from the database
 	pub fn del(&mut self, key: K) -> Result<(), Error> {
 		// Check to see if transaction is closed
@@ -190,6 +199,7 @@ where
 		// Return result
 		Ok(())
 	}
+
 	/// Delete a key if it matches a value
 	pub fn delc(&mut self, key: K, chk: Option<V>) -> Result<(), Error> {
 		// Check to see if transaction is closed
@@ -213,7 +223,20 @@ where
 		// Return result
 		Ok(())
 	}
+
 	/// Retrieve a range of keys from the databases
+	pub fn keys(&self, rng: Range<K>, limit: usize) -> Result<Vec<K>, Error> {
+		// Check to see if transaction is closed
+		if self.ok == true {
+			return Err(Error::TxClosed);
+		}
+		// Scan the keys
+		let res = self.ds.range(rng).take(limit).map(|(k, _)| k.clone()).collect();
+		// Return result
+		Ok(res)
+	}
+
+	/// Retrieve a range of key-value pairs from the databases
 	pub fn scan(&self, rng: Range<K>, limit: usize) -> Result<Vec<(K, V)>, Error> {
 		// Check to see if transaction is closed
 		if self.ok == true {
