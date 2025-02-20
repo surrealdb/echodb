@@ -14,9 +14,9 @@
 
 #![allow(clippy::bool_comparison)]
 
-pub mod db;
-pub mod err;
-pub mod tx;
+mod db;
+mod err;
+mod tx;
 
 #[cfg(test)]
 pub(crate) mod kv;

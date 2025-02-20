@@ -15,63 +15,79 @@
 //! This module stores the database transaction logic.
 
 use crate::err::Error;
-use arc_swap::ArcSwap;
+use crate::Database;
 use imbl::ordmap::Entry;
 use imbl::OrdMap;
+use std::borrow::Borrow;
+use std::fmt::Debug;
+use std::mem::drop;
 use std::ops::Range;
 use std::sync::Arc;
 use tokio::sync::OwnedMutexGuard;
 
-/// A serializable database transaction
-pub struct Tx<K, V> {
-	// Is the transaction complete?
-	pub(crate) ok: bool,
-	// Is the transaction read+write?
-	pub(crate) rw: bool,
-	// The immutable copy of the data map
-	pub(crate) ds: OrdMap<K, V>,
-	// The pointer to the latest data map
-	pub(crate) pt: Arc<ArcSwap<OrdMap<K, V>>>,
-	// The underlying database write mutex
-	pub(crate) lk: Option<OwnedMutexGuard<()>>,
+/// A serializable snapshot isolated database transaction
+pub struct Transaction<K, V>
+where
+	K: Ord + Clone + Debug + Sync + Send + 'static,
+	V: Eq + Clone + Debug + Sync + Send + 'static,
+{
+	/// Is the transaction complete?
+	done: bool,
+	/// Is the transaction writeable?
+	write: bool,
+	/// The current snapshot for this transaction
+	snapshot: OrdMap<K, V>,
+	/// The parent database for this transaction
+	database: Database<K, V>,
+	/// The parent datastore transaction write lock
+	writelock: Option<OwnedMutexGuard<()>>,
 }
 
-impl<K, V> Tx<K, V>
+impl<K, V> Transaction<K, V>
 where
-	K: Ord + Clone,
-	V: Eq + Clone,
+	K: Ord + Clone + Debug + Sync + Send + 'static,
+	V: Eq + Clone + Debug + Sync + Send + 'static,
 {
-	/// Create a new read-only or writeable transaction
-	pub(crate) fn new(
-		pt: Arc<ArcSwap<OrdMap<K, V>>>,
-		write: bool,
-		guard: Option<OwnedMutexGuard<()>>,
-	) -> Tx<K, V> {
-		Tx {
-			ok: false,
-			rw: write,
-			lk: guard,
-			pt: pt.clone(),
-			ds: (*(*pt.load())).clone(),
+	/// Create a new read-only transaction
+	pub(crate) fn read(db: Database<K, V>, lock: Option<OwnedMutexGuard<()>>) -> Transaction<K, V> {
+		Transaction {
+			done: false,
+			write: false,
+			snapshot: (*(*db.datastore.load())).clone(),
+			database: db,
+			writelock: lock,
+		}
+	}
+	/// Create a new writeable transaction
+	pub(crate) fn write(
+		db: Database<K, V>,
+		lock: Option<OwnedMutexGuard<()>>,
+	) -> Transaction<K, V> {
+		Transaction {
+			done: false,
+			write: true,
+			snapshot: (*(*db.datastore.load())).clone(),
+			database: db,
+			writelock: lock,
 		}
 	}
 
 	/// Check if the transaction is closed
 	pub fn closed(&self) -> bool {
-		self.ok
+		self.done
 	}
 
 	/// Cancel the transaction and rollback any changes
 	pub fn cancel(&mut self) -> Result<(), Error> {
 		// Check to see if transaction is closed
-		if self.ok == true {
+		if self.done == true {
 			return Err(Error::TxClosed);
 		}
 		// Mark this transaction as done
-		self.ok = true;
-		// Unlock the database mutex
-		if let Some(lk) = self.lk.take() {
-			drop(lk);
+		self.done = true;
+		// Release the commit lock
+		if let Some(lock) = self.writelock.take() {
+			drop(lock);
 		}
 		// Continue
 		Ok(())
@@ -80,77 +96,89 @@ where
 	/// Commit the transaction and store all changes
 	pub fn commit(&mut self) -> Result<(), Error> {
 		// Check to see if transaction is closed
-		if self.ok == true {
+		if self.done == true {
 			return Err(Error::TxClosed);
 		}
 		// Check to see if transaction is writable
-		if self.rw == false {
+		if self.write == false {
 			return Err(Error::TxNotWritable);
 		}
 		// Mark this transaction as done
-		self.ok = true;
-		// Commit the data
-		self.pt.store(Arc::new(self.ds.clone()));
-		// Unlock the database mutex
-		if let Some(lk) = self.lk.take() {
-			drop(lk);
+		self.done = true;
+		// Atomically update the datastore using ArcSwap
+		self.database.datastore.store(Arc::new(self.snapshot.clone()));
+		// Release the commit lock
+		if let Some(lock) = self.writelock.take() {
+			drop(lock);
 		}
 		// Continue
 		Ok(())
 	}
 
 	/// Check if a key exists in the database
-	pub fn exi(&self, key: K) -> Result<bool, Error> {
+	pub fn exists<Q>(&self, key: Q) -> Result<bool, Error>
+	where
+		Q: Borrow<K>,
+	{
 		// Check to see if transaction is closed
-		if self.ok == true {
+		if self.done == true {
 			return Err(Error::TxClosed);
 		}
 		// Check the key
-		let res = self.ds.contains_key(&key);
+		let res = self.snapshot.contains_key(key.borrow());
 		// Return result
 		Ok(res)
 	}
 
 	/// Fetch a key from the database
-	pub fn get(&self, key: K) -> Result<Option<V>, Error> {
+	pub fn get<Q>(&self, key: Q) -> Result<Option<V>, Error>
+	where
+		Q: Borrow<K>,
+	{
 		// Check to see if transaction is closed
-		if self.ok == true {
+		if self.done == true {
 			return Err(Error::TxClosed);
 		}
 		// Get the key
-		let res = self.ds.get(&key).cloned();
+		let res = self.snapshot.get(key.borrow()).cloned();
 		// Return result
 		Ok(res)
 	}
 
 	/// Insert or update a key in the database
-	pub fn set(&mut self, key: K, val: V) -> Result<(), Error> {
+	pub fn set<Q>(&mut self, key: Q, val: V) -> Result<(), Error>
+	where
+		Q: Into<K>,
+	{
 		// Check to see if transaction is closed
-		if self.ok == true {
+		if self.done == true {
 			return Err(Error::TxClosed);
 		}
 		// Check to see if transaction is writable
-		if self.rw == false {
+		if self.write == false {
 			return Err(Error::TxNotWritable);
 		}
 		// Set the key
-		self.ds.insert(key, val);
+		self.snapshot.insert(key.into(), val);
 		// Return result
 		Ok(())
 	}
 
 	/// Insert a key if it doesn't exist in the database
-	pub fn put(&mut self, key: K, val: V) -> Result<(), Error> {
+	pub fn put<Q>(&mut self, key: Q, val: V) -> Result<(), Error>
+	where
+		Q: Borrow<K> + Into<K>,
+	{
 		// Check to see if transaction is closed
-		if self.ok == true {
+		if self.done == true {
 			return Err(Error::TxClosed);
 		}
 		// Check to see if transaction is writable
-		if self.rw == false {
+		if self.write == false {
 			return Err(Error::TxNotWritable);
 		}
 		// Set the key
-		match self.ds.entry(key) {
+		match self.snapshot.entry(key.into()) {
 			Entry::Vacant(v) => {
 				v.insert(val);
 			}
@@ -161,17 +189,20 @@ where
 	}
 
 	/// Insert a key if it matches a value
-	pub fn putc(&mut self, key: K, val: V, chk: Option<V>) -> Result<(), Error> {
+	pub fn putc<Q>(&mut self, key: Q, val: V, chk: Option<V>) -> Result<(), Error>
+	where
+		Q: Borrow<K> + Into<K>,
+	{
 		// Check to see if transaction is closed
-		if self.ok == true {
+		if self.done == true {
 			return Err(Error::TxClosed);
 		}
 		// Check to see if transaction is writable
-		if self.rw == false {
+		if self.write == false {
 			return Err(Error::TxNotWritable);
 		}
 		// Set the key
-		match (self.ds.entry(key), &chk) {
+		match (self.snapshot.entry(key.into()), &chk) {
 			(Entry::Occupied(mut v), Some(w)) if v.get() == w => {
 				v.insert(val);
 			}
@@ -185,33 +216,39 @@ where
 	}
 
 	/// Delete a key from the database
-	pub fn del(&mut self, key: K) -> Result<(), Error> {
+	pub fn del<Q>(&mut self, key: Q) -> Result<(), Error>
+	where
+		Q: Borrow<K>,
+	{
 		// Check to see if transaction is closed
-		if self.ok == true {
+		if self.done == true {
 			return Err(Error::TxClosed);
 		}
 		// Check to see if transaction is writable
-		if self.rw == false {
+		if self.write == false {
 			return Err(Error::TxNotWritable);
 		}
 		// Remove the key
-		self.ds.remove(&key);
+		self.snapshot.remove(key.borrow());
 		// Return result
 		Ok(())
 	}
 
 	/// Delete a key if it matches a value
-	pub fn delc(&mut self, key: K, chk: Option<V>) -> Result<(), Error> {
+	pub fn delc<Q>(&mut self, key: Q, chk: Option<V>) -> Result<(), Error>
+	where
+		Q: Borrow<K> + Into<K>,
+	{
 		// Check to see if transaction is closed
-		if self.ok == true {
+		if self.done == true {
 			return Err(Error::TxClosed);
 		}
 		// Check to see if transaction is writable
-		if self.rw == false {
+		if self.write == false {
 			return Err(Error::TxNotWritable);
 		}
 		// Remove the key
-		match (self.ds.entry(key), &chk) {
+		match (self.snapshot.entry(key.into()), &chk) {
 			(Entry::Occupied(v), Some(w)) if v.get() == w => {
 				v.remove();
 			}
@@ -225,25 +262,42 @@ where
 	}
 
 	/// Retrieve a range of keys from the databases
-	pub fn keys(&self, rng: Range<K>, limit: usize) -> Result<Vec<K>, Error> {
+	pub fn keys<Q>(&self, rng: Range<Q>, limit: usize) -> Result<Vec<K>, Error>
+	where
+		Q: Into<K>,
+	{
 		// Check to see if transaction is closed
-		if self.ok == true {
+		if self.done == true {
 			return Err(Error::TxClosed);
 		}
+		// Compute the range
+		let beg = rng.start.into();
+		let end = rng.end.into();
 		// Scan the keys
-		let res = self.ds.range(rng).take(limit).map(|(k, _)| k.clone()).collect();
+		let res = self.snapshot.range(beg..end).take(limit).map(|(k, _)| k.clone()).collect();
 		// Return result
 		Ok(res)
 	}
 
 	/// Retrieve a range of key-value pairs from the databases
-	pub fn scan(&self, rng: Range<K>, limit: usize) -> Result<Vec<(K, V)>, Error> {
+	pub fn scan<Q>(&self, rng: Range<Q>, limit: usize) -> Result<Vec<(K, V)>, Error>
+	where
+		Q: Into<K>,
+	{
 		// Check to see if transaction is closed
-		if self.ok == true {
+		if self.done == true {
 			return Err(Error::TxClosed);
 		}
+		// Compute the range
+		let beg = rng.start.into();
+		let end = rng.end.into();
 		// Scan the keys
-		let res = self.ds.range(rng).take(limit).map(|(k, v)| (k.clone(), v.clone())).collect();
+		let res = self
+			.snapshot
+			.range(beg..end)
+			.take(limit)
+			.map(|(k, v)| (k.clone(), v.clone()))
+			.collect();
 		// Return result
 		Ok(res)
 	}
